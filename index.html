@@ -1,544 +1,969 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Table, 
-  Button, 
-  Card, 
-  Input,
-  Select
-} from '@/components/ui/card';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
-import * as XLSX from 'xlsx';
-
-const Dashboard = () => {
-  const meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-  const anos = [2023, 2024, 2025];
-  const cores = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
-
-  // Estado para gerenciar todos os dados
-  const [dados, setDados] = useState(() => {
-    const dadosSalvos = localStorage.getItem('dadosVendas');
-    return dadosSalvos ? JSON.parse(dadosSalvos) : [];
-  });
-  
-  // Estado para o novo registro
-  const [novoRegistro, setNovoRegistro] = useState({
-    id: '',
-    idProduto: '',
-    valorUnitario: '',
-    quantidade: '',
-    cliente: '',
-    numeroNF: '',
-    dataEmissao: ''
-  });
-  
-  // Estado para item sendo editado
-  const [editando, setEditando] = useState(null);
-  
-  // Estados para filtros
-  const [filtroAno, setFiltroAno] = useState('');
-  const [filtroMes, setFiltroMes] = useState('');
-  const [filtroCliente, setFiltroCliente] = useState('');
-  const [filtroProduto, setFiltroProduto] = useState('');
-  
-  // Dados derivados - clientes únicos e produtos únicos
-  const clientesUnicos = [...new Set(dados.map(item => item.cliente))];
-  const produtosUnicos = [...new Set(dados.map(item => item.idProduto))];
-  
-  // Salvar dados no localStorage quando atualizados
-  useEffect(() => {
-    localStorage.setItem('dadosVendas', JSON.stringify(dados));
-  }, [dados]);
-  
-  // Função para adicionar registro
-  const adicionarRegistro = () => {
-    if (!validarCampos()) return;
-    
-    const valorTotal = parseFloat(novoRegistro.valorUnitario) * parseInt(novoRegistro.quantidade);
-    
-    const novoItem = {
-      id: Date.now().toString(),
-      idProduto: novoRegistro.idProduto,
-      valorUnitario: parseFloat(novoRegistro.valorUnitario),
-      quantidade: parseInt(novoRegistro.quantidade),
-      valorTotal: valorTotal,
-      cliente: novoRegistro.cliente,
-      numeroNF: novoRegistro.numeroNF,
-      dataEmissao: novoRegistro.dataEmissao
-    };
-    
-    setDados([...dados, novoItem]);
-    limparFormulario();
-  };
-  
-  // Função para atualizar registro existente
-  const atualizarRegistro = () => {
-    if (!validarCampos()) return;
-    
-    const valorTotal = parseFloat(novoRegistro.valorUnitario) * parseInt(novoRegistro.quantidade);
-    
-    const dadosAtualizados = dados.map(item => {
-      if (item.id === editando) {
-        return {
-          ...item,
-          idProduto: novoRegistro.idProduto,
-          valorUnitario: parseFloat(novoRegistro.valorUnitario),
-          quantidade: parseInt(novoRegistro.quantidade),
-          valorTotal: valorTotal,
-          cliente: novoRegistro.cliente,
-          numeroNF: novoRegistro.numeroNF,
-          dataEmissao: novoRegistro.dataEmissao
-        };
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard de Vendas</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .card-kpi {
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s;
       }
-      return item;
-    });
-    
-    setDados(dadosAtualizados);
-    setEditando(null);
-    limparFormulario();
-  };
-  
-  // Função para excluir registro
-  const excluirRegistro = (id) => {
-    setDados(dados.filter(item => item.id !== id));
-  };
-  
-  // Função para editar registro
-  const iniciarEdicao = (item) => {
-    setNovoRegistro({
-      idProduto: item.idProduto,
-      valorUnitario: item.valorUnitario.toString(),
-      quantidade: item.quantidade.toString(),
-      cliente: item.cliente,
-      numeroNF: item.numeroNF,
-      dataEmissao: item.dataEmissao
-    });
-    setEditando(item.id);
-  };
-  
-  // Função para limpar formulário
-  const limparFormulario = () => {
-    setNovoRegistro({
-      idProduto: '',
-      valorUnitario: '',
-      quantidade: '',
-      cliente: '',
-      numeroNF: '',
-      dataEmissao: ''
-    });
-  };
-  
-  // Função para limpar todos os dados
-  const limparTodos = () => {
-    if (confirm('Tem certeza que deseja remover todos os registros?')) {
-      setDados([]);
-    }
-  };
-  
-  // Função para validar campos obrigatórios
-  const validarCampos = () => {
-    if (
-      !novoRegistro.idProduto ||
-      !novoRegistro.valorUnitario ||
-      !novoRegistro.quantidade ||
-      !novoRegistro.cliente ||
-      !novoRegistro.numeroNF ||
-      !novoRegistro.dataEmissao
-    ) {
-      alert('Todos os campos são obrigatórios, exceto o Valor Total que é calculado automaticamente.');
-      return false;
-    }
-    return true;
-  };
-  
-  // Exportar dados para Excel (.xlsx)
-  const exportarParaExcel = () => {
-    try {
-      // Preparar os dados para exportação
-      const dadosParaExportar = dadosFiltrados.map(item => ({
-        'ID Produto': item.idProduto,
-        'Valor Unitário': item.valorUnitario,
-        'Quantidade de Saída': item.quantidade,
-        'Valor Total': item.valorTotal,
-        'Cliente': item.cliente,
-        'Número da NF': item.numeroNF,
-        'Data de Emissão': new Date(item.dataEmissao).toLocaleDateString('pt-BR')
-      }));
-      
-      // Criar uma planilha usando dados
-      const planilha = XLSX.utils.json_to_sheet(dadosParaExportar);
-      
-      // Criar um livro e adicionar a planilha
-      const livro = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(livro, planilha, 'Dados de Vendas');
-      
-      // Gerar arquivo Excel
-      XLSX.writeFile(livro, 'dados_vendas.xlsx');
-      
-      console.log('Exportação concluída com sucesso!');
-    } catch (erro) {
-      console.error('Erro ao exportar para Excel:', erro);
-      alert('Ocorreu um erro ao exportar para Excel. Verifique o console para mais detalhes.');
-    }
-  };
-  
-  // Aplicar filtros aos dados
-  const dadosFiltrados = dados.filter(item => {
-    const data = new Date(item.dataEmissao);
-    const ano = data.getFullYear();
-    const mes = data.getMonth();
-    
-    return (
-      (!filtroAno || ano.toString() === filtroAno) &&
-      (!filtroMes || mes === parseInt(filtroMes)) &&
-      (!filtroCliente || item.cliente === filtroCliente) &&
-      (!filtroProduto || item.idProduto === filtroProduto)
-    );
-  });
-  
-  // Calcular KPIs
-  const somaValorTotal = dadosFiltrados.reduce((acc, item) => acc + item.valorTotal, 0);
-  const somaQuantidade = dadosFiltrados.reduce((acc, item) => acc + item.quantidade, 0);
-  
-  // Preparar dados para gráfico de rosca (participação dos clientes)
-  const dadosGraficoRosca = clientesUnicos.map(cliente => {
-    const totalCliente = dadosFiltrados
-      .filter(item => item.cliente === cliente)
-      .reduce((acc, item) => acc + item.valorTotal, 0);
-    
-    return {
-      nome: cliente,
-      valor: totalCliente
-    };
-  }).filter(item => item.valor > 0);
-  
-  // Preparar dados para gráfico de evolução mensal
-  const dadosGraficoEvolucao = meses.map((mes, index) => {
-    const valorMes = dadosFiltrados
-      .filter(item => {
-        const data = new Date(item.dataEmissao);
-        return data.getMonth() === index;
-      })
-      .reduce((acc, item) => acc + item.valorTotal, 0);
-    
-    return {
-      nome: mes,
-      valor: valorMes
-    };
-  });
-  
-  // Evento de mudança de campo do formulário
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setNovoRegistro({
-      ...novoRegistro,
-      [name]: value
-    });
-  };
+      .card-kpi:hover {
+        transform: translateY(-5px);
+      }
+      .chart-container {
+        height: 350px;
+        margin-bottom: 20px;
+      }
+      .table-responsive {
+        margin-bottom: 20px;
+      }
+      #donutChart,
+      #lineChart {
+        width: 100%;
+        height: 100%;
+      }
+      .btn-export {
+        margin-right: 10px;
+      }
+      .loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+      }
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+      @media (max-width: 768px) {
+        .chart-container {
+          height: 300px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="loading">
+      <div class="loading-spinner"></div>
+    </div>
 
-  return (
-    <div className="p-4 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6 text-center">Dashboard de Vendas</h1>
-      
-      {/* Seção de Filtros */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Filtros</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm mb-1">Ano</label>
-            <select 
-              className="w-full p-2 border rounded"
-              value={filtroAno}
-              onChange={(e) => setFiltroAno(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {anos.map(ano => (
-                <option key={ano} value={ano.toString()}>{ano}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Mês</label>
-            <select 
-              className="w-full p-2 border rounded"
-              value={filtroMes}
-              onChange={(e) => setFiltroMes(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {meses.map((mes, index) => (
-                <option key={index} value={index.toString()}>{mes}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Cliente</label>
-            <select 
-              className="w-full p-2 border rounded"
-              value={filtroCliente}
-              onChange={(e) => setFiltroCliente(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {clientesUnicos.map(cliente => (
-                <option key={cliente} value={cliente}>{cliente}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Produto</label>
-            <select 
-              className="w-full p-2 border rounded"
-              value={filtroProduto}
-              onChange={(e) => setFiltroProduto(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {produtosUnicos.map(produto => (
-                <option key={produto} value={produto}>{produto}</option>
-              ))}
-            </select>
-          </div>
+    <div class="container-fluid py-4">
+      <div class="row mb-4">
+        <div class="col-12">
+          <h1 class="text-center">Dashboard de Vendas</h1>
         </div>
       </div>
-      
-      {/* Seção de Cadastro */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Cadastro de Vendas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm mb-1">ID Produto *</label>
-            <input 
-              type="text" 
-              name="idProduto"
-              value={novoRegistro.idProduto}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              placeholder="ID do Produto"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Valor Unitário *</label>
-            <input 
-              type="number" 
-              name="valorUnitario"
-              value={novoRegistro.valorUnitario}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              placeholder="0.00"
-              step="0.01"
-              min="0"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Quantidade de Saída *</label>
-            <input 
-              type="number" 
-              name="quantidade"
-              value={novoRegistro.quantidade}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              placeholder="0"
-              min="1"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Cliente *</label>
-            <input 
-              type="text" 
-              name="cliente"
-              value={novoRegistro.cliente}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              placeholder="Nome do Cliente"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Número da NF *</label>
-            <input 
-              type="text" 
-              name="numeroNF"
-              value={novoRegistro.numeroNF}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              placeholder="Número da Nota Fiscal"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Data de Emissão *</label>
-            <input 
-              type="date" 
-              name="dataEmissao"
-              value={novoRegistro.dataEmissao}
-              onChange={handleChange}
-              className="w-full p-2 border rounded"
-              required
-            />
-          </div>
+
+      <!-- Filtros -->
+      <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+          <label for="filtroAno" class="form-label">Ano</label>
+          <select class="form-select" id="filtroAno">
+            <option value="">Todos</option>
+          </select>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {editando ? (
-            <button 
-              onClick={atualizarRegistro}
-              className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-            >
-              Atualizar Registro
-            </button>
-          ) : (
-            <button 
-              onClick={adicionarRegistro}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Adicionar Registro
-            </button>
-          )}
-          <button 
-            onClick={limparFormulario}
-            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+        <div class="col-md-3 mb-3">
+          <label for="filtroMes" class="form-label">Mês</label>
+          <select class="form-select" id="filtroMes">
+            <option value="">Todos</option>
+            <option value="1">Janeiro</option>
+            <option value="2">Fevereiro</option>
+            <option value="3">Março</option>
+            <option value="4">Abril</option>
+            <option value="5">Maio</option>
+            <option value="6">Junho</option>
+            <option value="7">Julho</option>
+            <option value="8">Agosto</option>
+            <option value="9">Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+            <option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="col-md-3 mb-3">
+          <label for="filtroCliente" class="form-label">Cliente</label>
+          <select class="form-select" id="filtroCliente">
+            <option value="">Todos</option>
+          </select>
+        </div>
+        <div class="col-md-3 mb-3">
+          <label for="filtroProduto" class="form-label">Produto</label>
+          <select class="form-select" id="filtroProduto">
+            <option value="">Todos</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Botões de Ação -->
+      <div class="row mb-4">
+        <div class="col-12 text-end">
+          <button
+            class="btn btn-success mb-2"
+            data-bs-toggle="modal"
+            data-bs-target="#cadastroModal"
           >
-            Limpar Formulário
+            <i class="fas fa-plus"></i> Novo Registro
           </button>
-          <button 
-            onClick={exportarParaExcel}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-          >
-            Exportar para Excel
+          <button class="btn btn-primary btn-export mb-2" id="btnExportar">
+            <i class="fas fa-file-export"></i> Exportar Excel
           </button>
-          <button 
-            onClick={limparTodos}
-            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Limpar Todos os Registros
+          <button class="btn btn-danger mb-2" id="btnLimparTabela">
+            <i class="fas fa-trash"></i> Limpar Tabela
           </button>
         </div>
       </div>
-      
-      {/* Tabela de Registros */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6 overflow-x-auto">
-        <h2 className="text-lg font-semibold mb-3">Registros</h2>
-        {dadosFiltrados.length > 0 ? (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Produto</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Unit.</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd.</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor Total</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cliente</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">NF</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {dadosFiltrados.map(item => (
-                <tr key={item.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">{item.idProduto}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">R$ {item.valorUnitario.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{item.quantidade}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">R$ {item.valorTotal.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{item.cliente}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{item.numeroNF}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">{new Date(item.dataEmissao).toLocaleDateString('pt-BR')}</td>
-                  <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                    <button 
-                      onClick={() => iniciarEdicao(item)}
-                      className="px-2 py-1 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600"
-                    >
-                      Editar
-                    </button>
-                    <button 
-                      onClick={() => excluirRegistro(item.id)}
-                      className="px-2 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
-                    >
-                      Excluir
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="text-center py-4 text-gray-500">Nenhum registro encontrado.</p>
-        )}
-      </div>
-      
-      {/* KPIs e Gráficos */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {/* KPIs */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-3">KPIs</h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="text-sm text-blue-700 mb-1">Valor Total</h3>
-              <p className="text-2xl font-bold">R$ {somaValorTotal.toFixed(2)}</p>
+
+      <!-- Tabela de Registros -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0">Registros de Vendas</h5>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <h3 className="text-sm text-green-700 mb-1">Quantidade Total</h3>
-              <p className="text-2xl font-bold">{somaQuantidade}</p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Gráfico de Rosca - Participação dos Clientes */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-3">Participação dos Clientes</h2>
-          {dadosGraficoRosca.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={dadosGraficoRosca}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="valor"
-                  nameKey="nome"
-                  label={({ nome, percent }) => `${nome}: ${(percent * 100).toFixed(1)}%`}
+            <div class="card-body">
+              <div class="table-responsive">
+                <table
+                  class="table table-striped table-hover"
+                  id="tabelaVendas"
                 >
-                  {dadosGraficoRosca.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={cores[index % cores.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-center py-4 text-gray-500">Sem dados para exibir.</p>
-          )}
+                  <thead>
+                    <tr>
+                      <th>ID Produto</th>
+                      <th>Valor Unitário</th>
+                      <th>Quantidade</th>
+                      <th>Valor Total</th>
+                      <th>Cliente</th>
+                      <th>Número NF</th>
+                      <th>Data Emissão</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Dados serão carregados dinamicamente -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      
-      {/* Gráfico de Evolução Mensal */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Evolução Mensal de Vendas</h2>
-        <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={dadosGraficoEvolucao.filter(item => item.valor > 0)}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="nome" />
-            <YAxis />
-            <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
-            <Legend />
-            <Line type="monotone" dataKey="valor" stroke="#8884d8" name="Valor Total" />
-          </LineChart>
-        </ResponsiveContainer>
+
+      <!-- Cards KPI -->
+      <div class="row mb-4">
+        <div class="col-md-6">
+          <div class="card card-kpi bg-info text-white">
+            <div class="card-body">
+              <h5 class="card-title">Total de Vendas</h5>
+              <h2 class="card-text" id="kpiTotalVendas">R$ 0,00</h2>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card card-kpi bg-success text-white">
+            <div class="card-body">
+              <h5 class="card-title">Quantidade Total</h5>
+              <h2 class="card-text" id="kpiQuantidadeTotal">0</h2>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gráficos -->
+      <div class="row">
+        <div class="col-md-6 mb-4">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0">Participação por Cliente</h5>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="donutChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 mb-4">
+          <div class="card">
+            <div class="card-header bg-primary text-white">
+              <h5 class="mb-0">Evolução Mensal de Vendas</h5>
+            </div>
+            <div class="card-body">
+              <div class="chart-container">
+                <canvas id="lineChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  );
-};
 
-export default Dashboard;
+    <!-- Modal de Cadastro -->
+    <div
+      class="modal fade"
+      id="cadastroModal"
+      tabindex="-1"
+      aria-labelledby="cadastroModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-primary text-white">
+            <h5 class="modal-title" id="cadastroModalLabel">Novo Registro</h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body">
+            <form id="formCadastro">
+              <input type="hidden" id="editId" />
+              <div class="mb-3">
+                <label for="idProduto" class="form-label">ID Produto *</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="idProduto"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label for="valorUnitario" class="form-label"
+                  >Valor Unitário *</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="valorUnitario"
+                  step="0.01"
+                  min="0"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label for="quantidade" class="form-label"
+                  >Quantidade de Saída *</label
+                >
+                <input
+                  type="number"
+                  class="form-control"
+                  id="quantidade"
+                  min="1"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label for="cliente" class="form-label">Cliente *</label>
+                <input type="text" class="form-control" id="cliente" required />
+              </div>
+              <div class="mb-3">
+                <label for="numeroNF" class="form-label">Número da NF *</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="numeroNF"
+                  required
+                />
+              </div>
+              <div class="mb-3">
+                <label for="dataEmissao" class="form-label"
+                  >Data de Emissão *</label
+                >
+                <input
+                  type="date"
+                  class="form-control"
+                  id="dataEmissao"
+                  required
+                />
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancelar
+            </button>
+            <button type="button" class="btn btn-primary" id="btnSalvar">
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div
+      class="modal fade"
+      id="confirmacaoModal"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title">Confirmação</h5>
+            <button
+              type="button"
+              class="btn-close btn-close-white"
+              data-bs-dismiss="modal"
+              aria-label="Close"
+            ></button>
+          </div>
+          <div class="modal-body" id="confirmacaoTexto">
+            Tem certeza que deseja realizar esta ação?
+          </div>
+          <div class="modal-footer">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              data-bs-dismiss="modal"
+            >
+              Cancelar
+            </button>
+            <button type="button" class="btn btn-danger" id="btnConfirmar">
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+      // Banco de dados simulado usando localStorage
+      class Database {
+        constructor() {
+          this.dbName = "dashboardVendas";
+          this.init();
+        }
+
+        init() {
+          if (!localStorage.getItem(this.dbName)) {
+            localStorage.setItem(this.dbName, JSON.stringify([]));
+          }
+        }
+
+        getAll() {
+          return JSON.parse(localStorage.getItem(this.dbName)) || [];
+        }
+
+        add(item) {
+          const data = this.getAll();
+          item.id = Date.now(); // ID único baseado no timestamp
+          data.push(item);
+          localStorage.setItem(this.dbName, JSON.stringify(data));
+          return item;
+        }
+
+        update(id, newData) {
+          const data = this.getAll();
+          const index = data.findIndex((item) => item.id === id);
+          if (index !== -1) {
+            data[index] = { ...data[index], ...newData };
+            localStorage.setItem(this.dbName, JSON.stringify(data));
+            return data[index];
+          }
+          return null;
+        }
+
+        delete(id) {
+          const data = this.getAll();
+          const newData = data.filter((item) => item.id !== id);
+          localStorage.setItem(this.dbName, JSON.stringify(newData));
+          return true;
+        }
+
+        clear() {
+          localStorage.setItem(this.dbName, JSON.stringify([]));
+          return true;
+        }
+      }
+
+      // Inicializa a aplicação
+      $(document).ready(function () {
+        const db = new Database();
+        let donutChart, lineChart;
+        let currentEditId = null;
+        let dadosFiltrados = [];
+
+        // Funções de formatação
+        function formatarData(dataISO) {
+          if (!dataISO) return "";
+          const data = new Date(dataISO);
+          return data.toLocaleDateString("pt-BR");
+        }
+
+        function formatarMoeda(valor) {
+          return valor.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+          });
+        }
+
+        // Carrega dados na tabela
+        function carregarTabela(dados = null) {
+          const registros = dados || db.getAll();
+          dadosFiltrados = registros;
+
+          const tbody = $("#tabelaVendas tbody");
+          tbody.empty();
+
+          registros.forEach((registro) => {
+            const valorTotal = (
+              parseFloat(registro.valorUnitario) * parseInt(registro.quantidade)
+            ).toFixed(2);
+
+            tbody.append(`
+                        <tr data-id="${registro.id}">
+                            <td>${registro.idProduto}</td>
+                            <td>${formatarMoeda(
+                              parseFloat(registro.valorUnitario)
+                            )}</td>
+                            <td>${registro.quantidade}</td>
+                            <td>${formatarMoeda(parseFloat(valorTotal))}</td>
+                            <td>${registro.cliente}</td>
+                            <td>${registro.numeroNF}</td>
+                            <td>${formatarData(registro.dataEmissao)}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning btn-editar" data-id="${
+                                  registro.id
+                                }">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger btn-excluir" data-id="${
+                                  registro.id
+                                }">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+          });
+
+          atualizarKPIs(registros);
+          atualizarGraficos(registros);
+          atualizarFiltros(registros);
+        }
+
+        // Atualiza os KPIs
+        function atualizarKPIs(dados) {
+          let totalVendas = 0;
+          let quantidadeTotal = 0;
+
+          dados.forEach((registro) => {
+            const valorTotal =
+              parseFloat(registro.valorUnitario) *
+              parseInt(registro.quantidade);
+            totalVendas += valorTotal;
+            quantidadeTotal += parseInt(registro.quantidade);
+          });
+
+          $("#kpiTotalVendas").text(formatarMoeda(totalVendas));
+          $("#kpiQuantidadeTotal").text(quantidadeTotal);
+        }
+
+        // Atualiza os gráficos
+        function atualizarGraficos(dados) {
+          // Gráfico de Rosca - Participação por Cliente
+          const clientesData = {};
+          dados.forEach((registro) => {
+            const valorTotal =
+              parseFloat(registro.valorUnitario) *
+              parseInt(registro.quantidade);
+            if (clientesData[registro.cliente]) {
+              clientesData[registro.cliente] += valorTotal;
+            } else {
+              clientesData[registro.cliente] = valorTotal;
+            }
+          });
+
+          const clientesLabels = Object.keys(clientesData);
+          const clientesValues = Object.values(clientesData);
+
+          // Gera cores aleatórias para o gráfico
+          const backgroundColors = clientesLabels.map(() => {
+            const r = Math.floor(Math.random() * 255);
+            const g = Math.floor(Math.random() * 255);
+            const b = Math.floor(Math.random() * 255);
+            return `rgba(${r}, ${g}, ${b}, 0.7)`;
+          });
+
+          // Gráfico de Evolução Mensal
+          const vendasPorMes = {
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0,
+            5: 0,
+            6: 0,
+            7: 0,
+            8: 0,
+            9: 0,
+            10: 0,
+            11: 0,
+            12: 0,
+          };
+
+          dados.forEach((registro) => {
+            if (registro.dataEmissao) {
+              const data = new Date(registro.dataEmissao);
+              const mes = data.getMonth() + 1;
+              const valorTotal =
+                parseFloat(registro.valorUnitario) *
+                parseInt(registro.quantidade);
+              vendasPorMes[mes] += valorTotal;
+            }
+          });
+
+          const mesesLabels = [
+            "Janeiro",
+            "Fevereiro",
+            "Março",
+            "Abril",
+            "Maio",
+            "Junho",
+            "Julho",
+            "Agosto",
+            "Setembro",
+            "Outubro",
+            "Novembro",
+            "Dezembro",
+          ];
+          const vendasValues = Object.values(vendasPorMes);
+
+          // Atualiza ou cria o gráfico de rosca
+          if (donutChart) {
+            donutChart.data.labels = clientesLabels;
+            donutChart.data.datasets[0].data = clientesValues;
+            donutChart.data.datasets[0].backgroundColor = backgroundColors;
+            donutChart.update();
+          } else {
+            const ctxDonut = document
+              .getElementById("donutChart")
+              .getContext("2d");
+            donutChart = new Chart(ctxDonut, {
+              type: "doughnut",
+              data: {
+                labels: clientesLabels,
+                datasets: [
+                  {
+                    data: clientesValues,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: "right",
+                  },
+                  tooltip: {
+                    callbacks: {
+                      label: function (context) {
+                        const value = context.raw;
+                        const total = context.dataset.data.reduce(
+                          (a, b) => a + b,
+                          0
+                        );
+                        const percentage = Math.round((value / total) * 100);
+                        return `${context.label}: ${formatarMoeda(
+                          value
+                        )} (${percentage}%)`;
+                      },
+                    },
+                  },
+                },
+                onClick: function (event, elements) {
+                  if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const cliente = clientesLabels[index];
+                    $("#filtroCliente").val(cliente);
+                    aplicarFiltros();
+                  }
+                },
+              },
+            });
+          }
+
+          // Atualiza ou cria o gráfico de linha
+          if (lineChart) {
+            lineChart.data.labels = mesesLabels;
+            lineChart.data.datasets[0].data = vendasValues;
+            lineChart.update();
+          } else {
+            const ctxLine = document
+              .getElementById("lineChart")
+              .getContext("2d");
+            lineChart = new Chart(ctxLine, {
+              type: "line",
+              data: {
+                labels: mesesLabels,
+                datasets: [
+                  {
+                    label: "Vendas Mensais",
+                    data: vendasValues,
+                    backgroundColor: "rgba(54, 162, 235, 0.2)",
+                    borderColor: "rgba(54, 162, 235, 1)",
+                    borderWidth: 2,
+                    tension: 0.3,
+                    fill: true,
+                  },
+                ],
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                    ticks: {
+                      callback: function (value) {
+                        return formatarMoeda(value);
+                      },
+                    },
+                  },
+                },
+                plugins: {
+                  tooltip: {
+                    callbacks: {
+                      label: function (context) {
+                        return `Vendas: ${formatarMoeda(context.raw)}`;
+                      },
+                    },
+                  },
+                },
+              },
+            });
+          }
+        }
+
+        // Atualiza os filtros
+        function atualizarFiltros(dados) {
+          // Obtém valores únicos para cada filtro
+          const anos = [
+            ...new Set(
+              dados
+                .map((item) => {
+                  return item.dataEmissao
+                    ? new Date(item.dataEmissao).getFullYear()
+                    : null;
+                })
+                .filter(Boolean)
+            ),
+          ];
+
+          const clientes = [...new Set(dados.map((item) => item.cliente))];
+          const produtos = [...new Set(dados.map((item) => item.idProduto))];
+
+          // Limpa e recria as opções dos filtros
+          const filtroAno = $("#filtroAno");
+          const filtroCliente = $("#filtroCliente");
+          const filtroProduto = $("#filtroProduto");
+
+          // Preserva a opção "Todos"
+          const anoSelecionado = filtroAno.val();
+          const clienteSelecionado = filtroCliente.val();
+          const produtoSelecionado = filtroProduto.val();
+
+          filtroAno.html('<option value="">Todos</option>');
+          filtroCliente.html('<option value="">Todos</option>');
+          filtroProduto.html('<option value="">Todos</option>');
+
+          // Adiciona as opções
+          anos
+            .sort((a, b) => b - a)
+            .forEach((ano) => {
+              filtroAno.append(`<option value="${ano}">${ano}</option>`);
+            });
+
+          clientes.sort().forEach((cliente) => {
+            filtroCliente.append(
+              `<option value="${cliente}">${cliente}</option>`
+            );
+          });
+
+          produtos.sort().forEach((produto) => {
+            filtroProduto.append(
+              `<option value="${produto}">${produto}</option>`
+            );
+          });
+
+          // Restaura a seleção anterior
+          filtroAno.val(anoSelecionado);
+          filtroCliente.val(clienteSelecionado);
+          filtroProduto.val(produtoSelecionado);
+        }
+
+        // Aplica os filtros
+        function aplicarFiltros() {
+          const anoSelecionado = $("#filtroAno").val();
+          const mesSelecionado = $("#filtroMes").val();
+          const clienteSelecionado = $("#filtroCliente").val();
+          const produtoSelecionado = $("#filtroProduto").val();
+
+          let dados = db.getAll();
+
+          if (anoSelecionado) {
+            dados = dados.filter((item) => {
+              const data = new Date(item.dataEmissao);
+              return data.getFullYear() == anoSelecionado;
+            });
+          }
+
+          if (mesSelecionado) {
+            dados = dados.filter((item) => {
+              const data = new Date(item.dataEmissao);
+              return data.getMonth() + 1 == mesSelecionado;
+            });
+          }
+
+          if (clienteSelecionado) {
+            dados = dados.filter((item) => item.cliente === clienteSelecionado);
+          }
+
+          if (produtoSelecionado) {
+            dados = dados.filter(
+              (item) => item.idProduto === produtoSelecionado
+            );
+          }
+
+          carregarTabela(dados);
+        }
+
+        // Salvar registro
+        function salvarRegistro() {
+          const formData = {
+            idProduto: $("#idProduto").val(),
+            valorUnitario: parseFloat($("#valorUnitario").val()),
+            quantidade: parseInt($("#quantidade").val()),
+            cliente: $("#cliente").val(),
+            numeroNF: $("#numeroNF").val(),
+            dataEmissao: $("#dataEmissao").val(),
+          };
+
+          if (currentEditId) {
+            db.update(currentEditId, formData);
+          } else {
+            db.add(formData);
+          }
+
+          $("#cadastroModal").modal("hide");
+          carregarTabela();
+          limparFormulario();
+        }
+
+        // Limpa o formulário
+        function limparFormulario() {
+          $("#formCadastro")[0].reset();
+          currentEditId = null;
+          $("#cadastroModalLabel").text("Novo Registro");
+        }
+
+        // Exportar para Excel
+        function exportarExcel() {
+          const wb = XLSX.utils.book_new();
+
+          // Prepara os dados para a exportação
+          const dadosExportar = dadosFiltrados.map((item) => {
+            const valorTotal =
+              parseFloat(item.valorUnitario) * parseInt(item.quantidade);
+            return {
+              "ID Produto": item.idProduto,
+              "Valor Unitário": parseFloat(item.valorUnitario),
+              Quantidade: parseInt(item.quantidade),
+              "Valor Total": valorTotal,
+              Cliente: item.cliente,
+              "Número NF": item.numeroNF,
+              "Data Emissão": formatarData(item.dataEmissao),
+            };
+          });
+
+          const ws = XLSX.utils.json_to_sheet(dadosExportar);
+          XLSX.utils.book_append_sheet(wb, ws, "Vendas");
+          XLSX.writeFile(wb, "dashboard_vendas.xlsx");
+        }
+
+        // Event listeners
+        $("#btnSalvar").click(function () {
+          if ($("#formCadastro")[0].checkValidity()) {
+            salvarRegistro();
+          } else {
+            $("#formCadastro")[0].reportValidity();
+          }
+        });
+
+        $(document).on("click", ".btn-editar", function () {
+          const id = $(this).data("id");
+          currentEditId = id;
+
+          const dados = db.getAll();
+          const registro = dados.find((item) => item.id === id);
+
+          if (registro) {
+            $("#idProduto").val(registro.idProduto);
+            $("#valorUnitario").val(registro.valorUnitario);
+            $("#quantidade").val(registro.quantidade);
+            $("#cliente").val(registro.cliente);
+            $("#numeroNF").val(registro.numeroNF);
+            $("#dataEmissao").val(registro.dataEmissao);
+
+            $("#cadastroModalLabel").text("Editar Registro");
+            $("#cadastroModal").modal("show");
+          }
+        });
+
+        $(document).on("click", ".btn-excluir", function () {
+          const id = $(this).data("id");
+          $("#confirmacaoTexto").text(
+            "Tem certeza que deseja excluir este registro?"
+          );
+
+          $("#btnConfirmar")
+            .off("click")
+            .on("click", function () {
+              db.delete(id);
+              $("#confirmacaoModal").modal("hide");
+              carregarTabela();
+            });
+
+          $("#confirmacaoModal").modal("show");
+        });
+
+        $("#btnLimparTabela").click(function () {
+          $("#confirmacaoTexto").text(
+            "Tem certeza que deseja limpar todos os registros da tabela?"
+          );
+
+          $("#btnConfirmar")
+            .off("click")
+            .on("click", function () {
+              db.clear();
+              $("#confirmacaoModal").modal("hide");
+              carregarTabela();
+            });
+
+          $("#confirmacaoModal").modal("show");
+        });
+
+        $("#btnExportar").click(exportarExcel);
+
+        $("#filtroAno, #filtroMes, #filtroCliente, #filtroProduto").change(
+          aplicarFiltros
+        );
+
+        $("#cadastroModal").on("hidden.bs.modal", limparFormulario);
+
+        // Carrega dados iniciais e esconde o spinner de loading
+        carregarTabela();
+
+        // Adiciona dados de exemplo se o banco estiver vazio
+        if (db.getAll().length === 0) {
+          const dadosExemplo = [
+            {
+              idProduto: "P001",
+              valorUnitario: 150.0,
+              quantidade: 5,
+              cliente: "Empresa ABC",
+              numeroNF: "00123",
+              dataEmissao: "2024-01-15",
+            },
+            {
+              idProduto: "P002",
+              valorUnitario: 75.5,
+              quantidade: 10,
+              cliente: "Empresa XYZ",
+              numeroNF: "00124",
+              dataEmissao: "2024-01-20",
+            },
+            {
+              idProduto: "P002",
+              valorUnitario: 75.5,
+              quantidade: 10,
+              cliente: "Empresa XYZ",
+              numeroNF: "00124",
+              dataEmissao: "2024-01-20",
+            },
+            {
+              idProduto: "P003",
+              valorUnitario: 200.0,
+              quantidade: 3,
+              cliente: "Empresa ABC",
+              numeroNF: "00125",
+              dataEmissao: "2024-02-05",
+            },
+            {
+              idProduto: "P004",
+              valorUnitario: 120.75,
+              quantidade: 8,
+              cliente: "Cliente Particular",
+              numeroNF: "00126",
+              dataEmissao: "2024-02-15",
+            },
+            {
+              idProduto: "P001",
+              valorUnitario: 150.0,
+              quantidade: 7,
+              cliente: "Empresa XYZ",
+              numeroNF: "00127",
+              dataEmissao: "2024-03-10",
+            },
+            {
+              idProduto: "P005",
+              valorUnitario: 300.25,
+              quantidade: 2,
+              cliente: "Cliente Particular",
+              numeroNF: "00128",
+              dataEmissao: "2024-03-20",
+            },
+          ];
+
+          dadosExemplo.forEach((item) => db.add(item));
+          carregarTabela();
+        }
+
+        setTimeout(() => {
+          $(".loading").fadeOut();
+        }, 1000);
+      });
+    </script>
+  </body>
+</html>
